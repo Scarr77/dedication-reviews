@@ -29,7 +29,8 @@ export default function Home() {
 
     try {
       const formData = new FormData();
-      formData.append("audio", file);
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      formData.append("audio", file, safeName);
 
       const response = await fetch("/api/review", {
         method: "POST",

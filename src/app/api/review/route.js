@@ -45,7 +45,7 @@ export async function POST(request) {
       PERSONA_PROMPT,
       {
         inlineData: {
-          mimeType: audioFile.type,
+          mimeType: audioFile.type || "audio/mpeg",
           data: audioBase64,
         },
       },
