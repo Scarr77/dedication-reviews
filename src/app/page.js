@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 async function compressToMp3(file) {
-  const { default: lamejs } = await import("lamejs");
+  const { Mp3Encoder } = await import("@breezystack/lamejs");
 
   const arrayBuffer = await file.arrayBuffer();
 
@@ -31,17 +31,17 @@ async function compressToMp3(file) {
   }
 
   // Encode to MP3 at 64 kbps mono
-  const encoder = new lamejs.Mp3Encoder(1, targetRate, 64);
+  const encoder = new Mp3Encoder(1, targetRate, 64);
   const chunks = [];
   const blockSize = 1152;
 
   for (let i = 0; i < int16.length; i += blockSize) {
     const chunk = int16.subarray(i, i + blockSize);
     const encoded = encoder.encodeBuffer(chunk);
-    if (encoded.length > 0) chunks.push(new Uint8Array(encoded));
+    if (encoded.length > 0) chunks.push(encoded);
   }
   const flushed = encoder.flush();
-  if (flushed.length > 0) chunks.push(new Uint8Array(flushed));
+  if (flushed.length > 0) chunks.push(flushed);
 
   return new Blob(chunks, { type: "audio/mpeg" });
 }
