@@ -2,10 +2,55 @@
 
 import { useState } from "react";
 
+async function compressToMp3(file) {
+  const { default: lamejs } = await import("lamejs");
+
+  const arrayBuffer = await file.arrayBuffer();
+
+  // Decode at native sample rate
+  const audioCtx = new AudioContext();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+  await audioCtx.close();
+
+  // Resample to mono 16kHz via OfflineAudioContext
+  const targetRate = 16000;
+  const numFrames = Math.ceil(audioBuffer.duration * targetRate);
+  const offlineCtx = new OfflineAudioContext(1, numFrames, targetRate);
+  const source = offlineCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(offlineCtx.destination);
+  source.start(0);
+  const rendered = await offlineCtx.startRendering();
+
+  // Convert float32 PCM → int16
+  const float32 = rendered.getChannelData(0);
+  const int16 = new Int16Array(float32.length);
+  for (let i = 0; i < float32.length; i++) {
+    const s = Math.max(-1, Math.min(1, float32[i]));
+    int16[i] = s < 0 ? s * 32768 : s * 32767;
+  }
+
+  // Encode to MP3 at 64 kbps mono
+  const encoder = new lamejs.Mp3Encoder(1, targetRate, 64);
+  const chunks = [];
+  const blockSize = 1152;
+
+  for (let i = 0; i < int16.length; i += blockSize) {
+    const chunk = int16.subarray(i, i + blockSize);
+    const encoded = encoder.encodeBuffer(chunk);
+    if (encoded.length > 0) chunks.push(new Uint8Array(encoded));
+  }
+  const flushed = encoder.flush();
+  if (flushed.length > 0) chunks.push(new Uint8Array(flushed));
+
+  return new Blob(chunks, { type: "audio/mpeg" });
+}
+
 export default function Home() {
   const [file, setFile] = useState(null);
   const [review, setReview] = useState("");
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
   const handleFileChange = (e) => {
@@ -28,9 +73,12 @@ export default function Home() {
     setReview("");
 
     try {
+      setStatus("Compressing audio...");
+      const compressed = await compressToMp3(file);
+
+      setStatus("The A&R is listening...");
       const formData = new FormData();
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      formData.append("audio", file, safeName);
+      formData.append("audio", compressed, "audio.mp3");
 
       const response = await fetch("/api/review", {
         method: "POST",
@@ -48,6 +96,7 @@ export default function Home() {
       setError(err.message);
     } finally {
       setLoading(false);
+      setStatus("");
     }
   };
 
@@ -87,7 +136,7 @@ export default function Home() {
             disabled={loading || !file}
             className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:from-zinc-700 disabled:to-zinc-700 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-xl transition-all"
           >
-            {loading ? "The A&R is listening..." : "Get Review"}
+            {loading ? status : "Get Review"}
           </button>
 
           {error && (
